@@ -30,7 +30,7 @@
                     prop="email"
                 >
                     <el-input v-model="ruleForm.email"></el-input>
-                    <el-button size="mini" round @click="sendEmail">发送验证码</el-button>
+                    <el-button size="mini" round @click="sendEmail" :disabled="emailBtnDisabled">发送验证码</el-button>
                     <span class="status">{{ emailStatusMsg }}</span>
                 </el-form-item>
                 <el-form-item
@@ -62,6 +62,7 @@
 </template>
 
 <script>
+import Crypto from 'crypto-js';
 export default {
     layout: 'blank',
     data(){
@@ -114,12 +115,71 @@ export default {
                 }],
             },
             emailStatusMsg: '',
-            errorMsg: ''
+            errorMsg: '',
+            emailBtnDisabled: false
         }
     },
     methods: {
-        sendEmail(){},
-        registerHandler(){}
+        async sendEmail(){
+            let namePass;
+            let emailPass;
+            if(this.timerid){
+                return false;
+            }
+            this.$refs['ruleForm'].validateField('name', valid => {
+                namePass = valid;
+            })
+            this.emailStatusMsg = '';
+            if(namePass){
+                return false;
+            }
+
+            this.$refs.ruleForm.validateField('email', valid => {
+                emailPass = valid;
+            })
+
+            // 名字和邮箱都通过验证
+            if(!namePass && !emailPass){
+                const data = await this.$api.userApi.verify({
+                    username: encodeURIComponent(this.ruleForm.name),
+                    email: this.ruleForm.email
+                })
+                if(data.code === 0){
+                    let count = 60;
+                    this.emailStatusMsg = `验证码已发送，剩余${count --}秒`;
+                    this.emailBtnDisabled = true;
+
+                    this.timer = setInterval(() => {
+                        this.emailStatusMsg = `验证码已发送，剩余${count --}秒`;
+                        if(count === 0){
+                            clearInterval(this.timer);
+                            this.emailStatusMsg = '';
+                            this.emailBtnDisabled = false;
+                        }
+                    }, 1000);
+                }else{
+                    this.emailStatusMsg = data.msg;
+                }
+            }
+        },
+        registerHandler(){
+            this.$refs.ruleForm.validate(async valid => {
+                if(valid){
+                    const data = await this.$api.userApi.register({
+                        username: encodeURIComponent(this.ruleForm.name),
+                        email: this.ruleForm.email,
+                        password: Crypto.MD5(this.ruleForm.pwd).toString(),
+                        code: this.ruleForm.code
+                    })
+
+                    if(data.code === 0){
+                        location.href = '/login'
+                    }else{
+                        this.errorMsg = data.msg;
+                    }
+                }
+            })
+        }
     }
 }
 </script>
